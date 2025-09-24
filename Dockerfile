@@ -9,6 +9,7 @@ RUN npm ci
 COPY . .
 # Copy the rules (non-TS assets are NOT emitted by tsc)
 COPY service/rules ./rules
+COPY service/config ./config
 
 # Build TS → JS
 RUN npx tsc --project tsconfig.json

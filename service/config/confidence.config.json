@@ -1,0 +1,33 @@
+{
+  "alpha": 0.7,
+  "fieldWeights": {
+    "deadline.iso": 0.40,
+    "deadline.absolute_hotel_time": 0.50,
+    "window.cutoff_days": 0.20,
+    "fee.nights": 0.20,
+    "fee.amount": 0.15,
+    "fee.percent": 0.20,
+    "deadline.local_time": 0.10,
+    "deadline.date_ddmmmyy": 0.10,
+    "fee.currency": 0.05
+  },
+  "criticalFields": [
+    "deadline.iso",
+    "deadline.absolute_hotel_time",
+    "window.cutoff_days",
+    "fee.nights",
+    "fee.percent",
+    "fee.amount"
+  ],
+  "coverageToScore": [
+    { "min": 0.40, "score": 1.0 },
+    { "min": 0.20, "score": 0.6 },
+    { "min": 0.00, "score": 0.3 }
+  ],
+  "minCriticalSignalsForHighConfidence": 2,
+  "lowCriticalCap": 0.6,
+  "penalties": {
+    "badFeeAmount": 0.1
+  },
+  "acceptRulesThreshold": 0.8
+}
