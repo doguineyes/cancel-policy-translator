@@ -1,20 +1,20 @@
 import express from "express";
-import { normalize } from "./normalize";
-import { loadRules } from "./rules";
 import { runRules } from "./engine";
 
 const app = express(); app.use(express.json());
-const rules = loadRules();
 
-app.post("/i18n/policy/translate", (req, res) => {
+app.post("/i18n/policy/translate", async (req, res) => {
     const raw: string = String(req.body.text ?? "");
-    const norm = normalize(raw);
-    const { policy, spans } = runRules(norm, rules);
+    const { text: normalized, policy, spans, confidence_rules } = runRules(raw);
+
+    // if we have an LLM fallback, trigger here when confidence is low
+    // const final = confidence_rules >= 0.8 ? policy : await runLLMFallback(normalized, policy);
+
     res.json({
         original: raw,
-        normalized: norm,
+        normalized,
         structured: policy,
-        meta: { rulesVersion: "v1", matches: spans.length }
+        meta: { rulesVersion: "v2", matches: spans.length, confidence_rules }
     });
 });
 

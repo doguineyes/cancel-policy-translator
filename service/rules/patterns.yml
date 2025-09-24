@@ -1,120 +1,98 @@
-version: v1
-rules:
+# A. DEADLINES (absolute and relative)
 
-  # ---- Fee types --------------------------------------------------------------
+- id: absolute_deadline_iso
+  priority: 60
+  regex: '\b(?:CANCEL(?:LATION)?\s+BY|CANCEL\s+BY|BY)\s+(?<iso>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\b'
+  map:
+    deadline.type: absolute
+    deadline.iso: $iso
 
-  - id: fee_fixed_amount
-    priority: 80
-    regex: '\b(?<amount>\d+(?:[.,]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(?<currency>HKD|USD|CNY|JPY|EUR|GBP|MOP|SGD|THB|TWD|IDR|VND|AUD|CAD)\b.*?\b(CXL\s+FEE|FEE|PENALTY|AMOUNT)\b'
-    map:
-      fee.amount: $amount
-      window.cutoff_days: ceil($h/24) or $days
-      deadline.date_ddmmmyy: $d1$mon$yy
+# "BY/AFTER/UNTIL 1800 11NOV" (optionally with year like 11NOV25)
+- id: absolute_deadline_ddmon_variants
+  priority: 60
+  regex: '\b(?:BY|AFTER|UNTIL)\s+(?<hh>\d{3,4})\s+(?<d1>\d{1,2})(?<mon>JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(?<yy>\d{2})?\b'
+  map:
+    deadline.type: absolute
+    deadline.local_hour: $hh
+    deadline.date_ddmmmyy: $d1$mon$yy
+    deadline.date_ddmon: $d1$mon
 
-  - id: fee_entire_stay_rt
-    priority: 80
-    regex: '\b(CXL\s+FEE\s+EQUALS\s+ROOM\s+AND\s+TAX|ROOM\s+AND\s+TAX\s+FOR\s+ENTIRE\s+STAY)\b'
-    map:
-      fee.type: entire_stay_room_and_tax
+# "2 DAYS PRIOR/BEFORE ARR(IVAL)"
+- id: relative_cutoff_days_to_arrival
+  priority: 65
+  regex: '\b(?<days>\d+)\s*DAYS?\s*(PRIOR|BEFORE)\s*(?:TO\s*)?(?:ARR(IVAL)?)\b'
+  map:
+    deadline.type: relative
+    deadline.relation: to_arrival
+    deadline.relative_days: $days
+    window.cutoff_days: $days
 
-  - id: fee_nights
-    priority: 75
-    regex: '\b(?:(?<n1>\d+)\s*NIGHTS?|(?<n2>\d+)\s*NT|FIRST\s+NITE|ONE\s+NITE|1\s*ST\s*NT)\b.*?(FEE|PENALTY|CHARGE|WILL\s+BE\s+CHARGED)'
-    map:
-      fee.type: nights_penalty
-      fee.nights: $n1 or $n2 or 1
+# "24H/24HRS PRIOR TO ARR" etc. (normalized to days via ceil)
+- id: relative_cutoff_hours_to_arrival
+  priority: 65
+  regex: '\b(?<h>\d+)\s*H(?:RS?|OURS?)?\s*(PRIOR|BEFORE)\s*(?:TO\s*)?(?:ARR(IVAL)?)\b'
+  map:
+    deadline.type: relative
+    deadline.relation: to_arrival
+    deadline.relative_hours: $h
+    window.cutoff_days: "ceil($h/24)"
 
-  - id: fee_percentage_or_nrf
-    priority: 75
-    regex: '\b(?:(?<p>\d{1,3})\s*(?:%|PCT|PR?C?NT)\b.*?(DEPOSIT|FEE)|NON-?REFUNDABLE|NON-?AMENDABLE)\b'
-    map:
-      fee.type: percentage_or_nrf
-      fee.percent: $p
+# B. FEES / PENALTIES
 
-  - id: tax_scope
-    priority: 70
-    regex: '\b(?<scope>INCL|EXCL)\s+TAX(?:-?FEES)?\b'
-    map:
-      fee.tax_scope: $scope
+# Amount + currency + label appears later somewhere
+- id: fee_fixed_amount_trailing_label
+  priority: 80
+  regex: '\b(?<amount>\d{1,3}(?:[.,]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*(?<currency>HKD|USD|CNY|JPY|EUR|GBP|MOP|SGD|THB|TWD|IDR|VND|AUD|CAD)\b.*?\b(FEE|PENALTY|AMOUNT)\b'
+  map:
+    fee.type: fixed_amount
+    fee.amount: $amount
+    fee.currency: $currency
 
-  # ---- Time windows / deadlines ---------------------------------------------
+# Label first → amount (currency optional after)
+- id: fee_amount_after_label
+  priority: 80
+  regex: '\b(CXL\s+FEE|FEE|PENALTY|AMOUNT)\b[^\dA-Z]{0,20}(?<amount>\d{1,3}(?:[.,]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)(?:\s*(?<currency>HKD|USD|CNY|JPY|EUR|GBP|MOP|SGD|THB|TWD|IDR|VND|AUD|CAD))?\b'
+  map:
+    fee.type: fixed_amount
+    fee.amount: $amount
+    fee.currency: $currency
 
-  - id: cutoff_days_prior
-    priority: 65
-    regex: '\b(?:(?<days>\d+)\s*DAYS?|(?<h>\d+)\s*H(?:RS?)?|(?<hours>\d+)\s*H(?:RS?)?)\s*(PRIOR|BEFORE)\s*(?:TO\s*)?(?:ARR(IVAL)?)\b'
-    map:
-      window.type: relative_to_arrival
-      window.cutoff_days: 'ceil($h/24) or ceil($hours/24) or $days'
+# Label first → currency first → amount
+- id: fee_amount_after_label_currency_first
+  priority: 80
+  regex: '\b(CXL\s+FEE|FEE|PENALTY|AMOUNT)\b[^\dA-Z]{0,20}(?<currency>HKD|USD|CNY|JPY|EUR|GBP|MOP|SGD|THB|TWD|IDR|VND|AUD|CAD)\s*(?<amount>\d{1,3}(?:[.,]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\b'
+  map:
+    fee.type: fixed_amount
+    fee.amount: $amount
+    fee.currency: $currency
 
-  - id: free_until_relative
-    priority: 65
-    regex: 'NO\s+CANCELLATION\s+CHARGE.*?UP\s*TO\s*(?:(?<days>\d+)\s*DAYS?|(?<h>\d+)\s*H(?:RS?)?)\s+PRIOR'
-    map:
-      window.type: relative_to_arrival
-      window.cutoff_days: ceil($h/24) or $days
+# "FORFEIT FIRST NITE/NIGHT"
+- id: fee_forfeit_first_night
+  priority: 75
+  regex: '\bFORFEIT\s+FIRST\s+NI?TE\b'
+  map:
+    fee.type: nights_penalty
+    fee.nights: 1
 
-  - id: absolute_deadline_ddmmmyy
-    priority: 60
-    regex: '\b(?:(?<hh>\d{3,4})\s*HTL\s+TIME\s+ON\s+(?<d1>\d{1,2})(?<mon>JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(?<yy>\d{2}))\b'
-    map:
-      deadline.local_hour: $hh
-      deadline.date_ddmmmyy: $d1$mon$yy
+# Generic nights penalty e.g., "1NT", "2 NIGHTS"
+- id: fee_nights_generic
+  priority: 75
+  regex: '\b(?<nights>\d+)\s*(?:NIGHTS?|NT|NITE)\b'
+  map:
+    fee.type: nights_penalty
+    fee.nights: $nights
 
-  - id: absolute_deadline_iso
-    priority: 60
-    regex: 'CANCEL\s+BY\s+(?<iso>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})'
-    map:
-      deadline.iso: $iso
+# Percentage penalty e.g., "100 PCT", "50%"
+- id: fee_percentage
+  priority: 75
+  regex: '\b(?<percent>\d{1,3})\s*(?:%|PCT)\b'
+  map:
+    fee.type: percentage
+    fee.percent: $percent
 
-  - id: explicit_local_time
-    priority: 58
-    regex: '\b(?:(?<hh>\d{1,2})(?::(?<mm>\d{2}))?\s*(?:PM|AM|H(?:RS?)?)|(?<hh4>\d{3,4}))\s*(?:LOCAL|HOTEL)?\s*(?:TIME|H)\b'
-    map:
-      deadline.local_hour: $hh or $hh4
-      deadline.local_minute: $mm
-
-  # ---- Unit-specific windows (optional v2) -----------------------------------
-
-  - id: unit_specific_windows
-    priority: 40
-    regex: '\b(?<days>\d+)D-(?<unit>RM|SUITE|3BR|4BR)\b'
-    map:
-      special_window.unit: $unit
-      special_window.cutoff_days: $days
-
-  # --- Additional fee patterns -------------------------------------------------
-
-  # Keyword BEFORE the number (amount only, currency optional after)
-  - id: fee_amount_after_label
-    priority: 80
-    regex: '\b(CXL\s+FEE|FEE|PENALTY|AMOUNT)\b[^\dA-Z]{0,20}(?<amount>\d{1,3}(?:[.,]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)(?:\s*(?<currency>HKD|USD|CNY|JPY|EUR|GBP|MOP|SGD|THB|TWD|IDR|VND|AUD|CAD))?\b'
-    map:
-      fee.amount: $amount
-      fee.currency: $currency
-
-  # Keyword BEFORE amount, currency BEFORE number (e.g., "PENALTY AMOUNT HKD 17,917.24")
-  - id: fee_amount_after_label_currency_first
-    priority: 80
-    regex: '\b(CXL\s+FEE|FEE|PENALTY|AMOUNT)\b[^\dA-Z]{0,20}(?<currency>HKD|USD|CNY|JPY|EUR|GBP|MOP|SGD|THB|TWD|IDR|VND|AUD|CAD)\s*(?<amount>\d{1,3}(?:[.,]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\b'
-    map:
-      fee.amount: $amount
-      fee.currency: $currency
-
-  # Explicit "FORFEIT FIRST NITE" → one-night penalty
-  - id: fee_forfeit_first_night
-    priority: 75
-    regex: '\bFORFEIT\s+FIRST\s+NI?TE\b'
-    map:
-      fee.type: nights_penalty
-      fee.nights: 1
-
-  # --- Additional deadline patterns --------------------------------------------
-
-  # Covers "AFTER 1800 11NOV" or "BY 1800 11NOV25"
-  - id: absolute_deadline_ddmon_variants
-    priority: 60
-    regex: '\b(?:BY|AFTER|UNTIL)\s+(?<hh>\d{3,4})\s+(?<d1>\d{1,2})(?<mon>JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(?<yy>\d{2})?\b'
-    map:
-      deadline.local_hour: $hh
-      deadline.date_ddmmmyy: $d1$mon$yy
-      deadline.date_ddmon: $d1$mon
+# Non-refundable flag
+- id: fee_non_refundable
+  priority: 90
+  regex: '\bNON-?REFUNDABLE|NON-?AMENDABLE\b'
+  map:
+    fee.type: non_refundable
