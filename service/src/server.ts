@@ -1,5 +1,6 @@
 import express from "express";
 import { runRules } from "./engine";
+import { renderPolicy } from "./renderer";
 
 const app = express(); app.use(express.json());
 
@@ -11,9 +12,9 @@ app.post("/i18n/policy/translate", async (req, res) => {
     // const final = confidence_rules >= 0.8 ? policy : await runLLMFallback(normalized, policy);
 
     if (acceptRules) {
-        res.json({ original: raw, normalized: normalized, structured: policy, meta: { mode: "rules", coverage } });
+        res.json({ original: raw, normalized: normalized, structured: policy, translate: renderPolicy(policy), meta: { mode: "rules", coverage } });
     } else {
-        res.json({ original: raw, normalized: normalized, structured: policy, meta: { mode: "rules+llm", coverage } });
+        res.json({ original: raw, normalized: normalized, structured: policy, translate: renderPolicy(policy), meta: { mode: "rules+llm", coverage } });
     }
 });
 

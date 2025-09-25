@@ -1,97 +1,179 @@
-# v3 – broad coverage for Out_70.json
+# patterns.yml — v4 coverage-first precision pack
 
-- id: cutoff_prior_hours_or_days
-  priority: 90
-  regex: '\b(?:(?<hours>\d+)\s*(?:H|HRS?|HOURS)|(?<days>\d+)\s*(?:D|DAYS?))\s*(?:PRIOR|BEFORE)\s*(?:TO\s*)?(?:ARR(?:IVAL)?)\b'
+###############################################################################
+# A) ARRIVAL-DAY CUTOFFS (your cluster: “BEFORE 1200 DAY OF ARRIVAL”, etc.)
+###############################################################################
+
+- id: arrival_day_before_numeric_time
+  priority: 96
+  regex: '\b-?\s*(?:CANCELLATION\s+PERMITTED\s+)?(?:BEFORE|BY)\s+(?<hhmm>\d{3,4}|\d{1,2}:\d{2})\s+(?:DAY\s+OF\s+ARR(?:IVAL)?)\b'
   map:
-    window.type: relative_to_arrival
-    window.cutoff_days: "ceil($hours/24) or $days"
-    deadline.type: relative
-    deadline.relation: to_arrival
-    deadline.relative_hours: "$hours"
-    deadline.relative_days: "$days"
+    policy.cancellable: "true"
+    window.type: arrival_day
+    deadline.type: arrival_day_cutoff
+    deadline.local_time: "$hhmm"
 
-- id: cutoff_prior_compact_D
+- id: arrival_day_before_noon
+  priority: 96
+  regex: '\b-?\s*(?:CANCELLATION\s+PERMITTED\s+)?(?:BEFORE|BY)\s+NOON\s+(?:DAY\s+OF\s+ARR(?:IVAL)?)\b'
+  map:
+    policy.cancellable: "true"
+    window.type: arrival_day
+    deadline.type: arrival_day_cutoff
+    deadline.local_time: "1200"
+
+- id: arrival_day_before_midnight
+  priority: 96
+  regex: '\b-?\s*(?:CANCELLATION\s+PERMITTED\s+)?(?:BEFORE|BY)\s+MIDNIGHT\s+(?:DAY\s+OF\s+ARR(?:IVAL)?)\b'
+  map:
+    policy.cancellable: "true"
+    window.type: arrival_day
+    deadline.type: arrival_day_cutoff
+    deadline.local_time: "0000"
+
+- id: arrival_day_by_6pm
+  priority: 96
+  regex: '\b-?\s*(?:CANCELLATION\s+PERMITTED\s+)?(?:BEFORE|BY)\s*6\s*PM\s+(?:LOCAL\s+(?:HOTEL\s+)?TIME\s+)?(?:DAY\s+OF\s+ARR(?:IVAL)?)\b'
+  map:
+    policy.cancellable: "true"
+    window.type: arrival_day
+    deadline.type: arrival_day_cutoff
+    deadline.local_time: "1800"
+
+- id: cxl_on_arr_date_clock
+  priority: 95
+  regex: '\b(?<clock>\d{1,2}\s*PM|\d{3,4})\s+CXL\s+ON\s+ARR\s+DATE\b'
+  map:
+    policy.cancellable: "true"
+    window.type: arrival_day
+    deadline.type: arrival_day_cutoff
+    deadline.local_time: "$clock"
+
+###############################################################################
+# B) RELATIVE CUTOFFS (DAYS/HOURS PRIOR TO ARRIVAL)
+###############################################################################
+
+- id: cutoff_days_prior
   priority: 90
   regex: '\b(?<days>\d+)\s*DAYS?\s*(?:PRIOR|BEFORE)\s*(?:TO\s*)?(?:ARR(?:IVAL)?)\b'
   map:
+    policy.cancellable: "true"
     window.type: relative_to_arrival
     window.cutoff_days: "$days"
     deadline.type: relative
     deadline.relation: to_arrival
     deadline.relative_days: "$days"
 
-- id: cutoff_prior_compact_HRS
+- id: cutoff_hours_prior
   priority: 90
-  regex: '\b(?<hours>\d+)\s*H(?:RS?|OURS)?\s*(?:PRIOR|BEFORE)\s*(?:TO\s*)?(?:ARR(?:IVAL)?)\b'
+  regex: '\b(?<hours>\d+)\s*H(?:RS?|OURS?)?\s*(?:PRIOR|BEFORE)\s*(?:TO\s*)?(?:ARR(?:IVAL)?)\b'
   map:
+    policy.cancellable: "true"
     window.type: relative_to_arrival
     window.cutoff_days: "ceil($hours/24)"
     deadline.type: relative
     deadline.relation: to_arrival
     deadline.relative_hours: "$hours"
 
+- id: cancel_by_local_time_relative_days
+  priority: 88
+  regex: '\bCANCEL(?:LED)?\s+BY\s+(?<hhmm>\d{1,2}(?::\d{2})?|(?:(?:0?\d|1[0-2]))\s*PM)\s+(?:LOCAL\s+(?:HOTEL\s+)?TIME)\s+(?<days>\d+)\s+DAYS?\s+PRIOR\s+TO\s+ARR(?:IVAL)?\b'
+  map:
+    policy.cancellable: "true"
+    window.type: relative_to_arrival
+    window.cutoff_days: "$days"
+    deadline.type: relative_with_time
+    deadline.relation: to_arrival
+    deadline.relative_days: "$days"
+    deadline.local_time: "$hhmm"
+
+###############################################################################
+# C) ABSOLUTE DEADLINES (Hotel local time on date; ISO “CANCEL BY …”)
+###############################################################################
+
+- id: htl_time_on_ddmonyy
+  priority: 95
+  regex: '\bCXL\s+(?<hhmm>\d{3,4})\s+HTL\s+TIME\s+ON\s+(?<dd>\d{2})(?<mon>JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(?<yy>\d{2})\b'
+  map:
+    policy.cancellable: "true"
+    deadline.type: absolute_hotel_time
+    deadline.local_time: "$hhmm"
+    deadline.date_ddmmmyy: "$dd$mon$yy"
+    deadline.absolute_hotel_time: "1"   # flag for scorers, if any
+
 - id: cancel_by_iso
   priority: 100
   regex: '\bCANCEL\s+BY\s+(?<iso>\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})\b'
   map:
+    policy.cancellable: "true"
     deadline.type: absolute_iso
     deadline.iso: "$iso"
 
-- id: cancel_by_clock_then_days
-  priority: 85
-  regex: '\b(?:CANCEL|CXL)\s+BY\s+(?<hhmm>\d{3,4}|\d{2}:\d{2})\s+(?<days>\d+)\s*DAYS?\s+PRIOR\b'
-  map:
-    deadline.type: relative_with_time
-    deadline.local_time: "$hhmm"
-    deadline.relative_days: "$days"
-    window.type: relative_to_arrival
-    window.cutoff_days: "$days"
+###############################################################################
+# D) FEES & PENALTIES (fixed amount, nights, percent, full stay)
+###############################################################################
 
-- id: htl_time_on_ddMONyy
-  priority: 95
-  regex: '\bCXL\s+(?<hhmm>\d{3,4})\s+HTL\s+TIME\s+ON\s+(?<dd>\d{2})(?<mon>[A-Z]{3})(?<yy>\d{2})\b'
+# “1058.00 CNY CXL FEE PER ROOM”
+- id: fee_per_room_amount_currency
+  priority: 92
+  regex: '\b(?<amount>\d{1,3}(?:[.,]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*,?\s*(?<currency>[A-Z]{3})\s+CXL\s+FEE\s+PER\s+ROOM\b'
   map:
-    deadline.type: absolute_hotel_time
-    deadline.local_time: "$hhmm"
-    deadline.date_ddmmmyy: "$dd$mon$yy"
-    deadline.absolute_hotel_time: "1"   # <— flag for the scorer
+    fee.type: fixed_amount
+    fee.amount: "$amount"
+    fee.currency: "$currency"
 
-- id: after_1800_ddMON_forfeit_first_nite
+# “PENALTY AMOUNT 17917.24”
+- id: penalty_amount_value
+  priority: 98
+  regex: '\bPENALTY\s+AMOUNT\s+(?<amount>\d{1,3}(?:[.,]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\b'
+  map:
+    penalty.amount: "$amount"
+
+# Nights penalties: “FEE 1 NIGHT”, “PENALTY OF 1 NIGHT”, “1 NT/1NT”
+- id: fee_one_night_simple
   priority: 94
-  regex: '\bAFTER\s+(?<hhmm>\d{3,4})\s+(?<dd>\d{2})(?<mon>[A-Z]{3})\b.*?(?:FORFEIT|FORFEITS?)\s+(?:FIRST|1(?:ST)?)\s+(?:NITE|NIGHT)\b'
+  regex: '\b(?:FEE|CHARGE|PENALTY)\s+1\s+(?:NITE|NIGHT)\b'
   map:
-    fee.type: nights
-    fee.nights: "1"
-    deadline.note: "after_$hhmm_$dd$mon"
-
-- id: first_night_fee_variants
-  priority: 88
-  regex: '\b(?:1\s*(?:NT|NIGHT)|FIRST\s+(?:NITE|NIGHT))\s+(?:FEE|PENALTY|CHARGE|APPLIES?)\b'
-  map:
-    fee.type: nights
+    fee.type: nights_penalty
     fee.nights: "1"
 
-- id: full_stay_fee
+- id: penalty_of_one_night
+  priority: 94
+  regex: '\bPENALTY\s+OF\s+1\s+(?:NITE|NIGHT)\b'
+  map:
+    fee.type: nights_penalty
+    fee.nights: "1"
+
+- id: nights_generic
+  priority: 86
+  regex: '\b(?<n>\d+)\s*(?:NIGHTS?|NT|NITE)\b'
+  map:
+    fee.type: nights_penalty
+    fee.nights: "$n"
+
+# Percentage penalties: “100 PCT”, “100% (OF STAY)”
+- id: percent_100
+  priority: 92
+  regex: '\b100\s*(?:%|PCT)(?:\s*(?:OF\s+STAY|\bSTAY\b))?\b'
+  map:
+    fee.type: percentage
+    fee.percent: "100"
+
+- id: percent_generic
+  priority: 80
+  regex: '\b(?<pct>\d{1,3})\s*(?:%|PCT)(?:\s*(?:OF\s+STAY|\bSTAY\b))?\b'
+  map:
+    fee.type: percentage
+    fee.percent: "$pct"
+
+# Full stay (explicit non-percentage wording)
+- id: fee_full_stay
   priority: 92
   regex: '\b(?:CXL\s+FEE\s+)?FULL\s+STAY\b'
   map:
     fee.type: full_stay
 
-- id: percent_of_stay_100
-  priority: 92
-  regex: '\b(?:100)\s*(?:PCT|%)(?:\s+OF\s+STAY|\s*STAY)?\b'
-  map:
-    fee.type: percentage
-    fee.percent: "100"
-
-- id: percent_of_stay_generic
-  priority: 80
-  regex: '\b(?<pct>\d{1,3})\s*(?:PCT|%)\s*(?:OF\s+STAY)?\b'
-  map:
-    fee.type: percentage
-    fee.percent: "$pct"
-
+# Tax scope
 - id: incl_tax_fees
   priority: 70
   regex: '\bINCL\s+TAX-?FEES\b'
@@ -104,149 +186,111 @@
   map:
     fee.tax_scope: excluded
 
-- id: cxl_fee_per_room_amount_currency
-  priority: 78
-  regex: '\b(?<amount>\d+(?:\.\d{1,2})?)\s*(?<cur>[A-Z]{3}|HKD|CNY|USD|THB|JPY|SGD|MOP|IDR|EUR|GBP|AUD|MYR)\s+CXL\s+FEE\s+PER\s+ROOM\b'
-  map:
-    fee.amount: "$amount"
-    fee.currency: "$cur"
+###############################################################################
+# E) CANCELLABLE / NON-CANCELLABLE FLAGS
+###############################################################################
 
-- id: penalty_amount_value
-  priority: 98
-  regex: '\bPENALTY\s+AMOUNT\s+(?<amount>\d+(?:\.\d{1,2})?)\b'
-  map:
-    penalty.amount: "$amount"
-
-- id: day_of_arrival_free_until_time
-  priority: 76
-  regex: '\bFREE\s+CXL\s+(?:UNTIL|TILL)\s+(?<hhmm>\d{1,2}(?::?\d{2})?)\s+(?:LOCAL\s+(?:HOTEL\s+)?TIME|UK\s+TIME|JST|TAIWAN\s+TIME)?\s+(?:ON\s+)?(?:DAY\s+OF\s+ARR(?:IVAL)?)\b'
-  map:
-    deadline.type: arrival_day_cutoff
-    deadline.local_time: "$hhmm"
-    window.type: arrival_day
-
-- id: no_cancellation_charge_until_days
-  priority: 75
-  regex: '\bNO\s+CANCELLATION\s+CHARGE\s+APPLIES?\s+(?:PRIOR\s+TO|UP\s*TO)\s+(?<hhmm>\d{1,2}:\d{2})?\s*(?:LOCAL\s+TIME\s+)?(?:(?:UP\s*TO\s*)?)(?<days>\d+)\s*DAYS?\s+PRIOR\s+TO\s+ARRIVAL\b'
-  map:
-    window.type: relative_to_arrival
-    window.cutoff_days: "$days"
-    deadline.note: "$hhmm"
-
-- id: cancel_by_clock_day_of_arrival
-  priority: 74
-  regex: '\b(?:CANCEL|CXL)\s+BY\s+(?<hhmm>\d{3,4}|\d{1,2}(?::\d{2})?)\s+(?:LOCAL\s+(?:HOTEL\s+)?TIME)?\s+(?:DAY\s+OF\s+ARR(?:IVAL)?|ON\s+ARR(?:IVAL)?\s+DATE)\b'
-  map:
-    deadline.type: arrival_day_cutoff
-    deadline.local_time: "$hhmm"
-    window.type: arrival_day
-
-- id: deposit_nonrefundable
+- id: cancellation_permitted_marker
   priority: 60
-  regex: '\bNON-?REFUNDABLE\b'
+  regex: '\bCANCELLATION\s+PERMITTED\b'
   map:
-    policy.flags.non_refundable: "true"
+    policy.cancellable: "true"
 
-- id: equals_room_tax_entire_stay
-  priority: 85
-  regex: '\bCXL\s+FEE\s+EQUALS?\s+ROOM\s+AND\s+TAX\s+FOR\s+ENTIRE\s+STAY\b'
+- id: nonrefundable_markers
+  priority: 99
+  regex: '\bNON-?REFUNDABLE|NON-?CANCELLABLE|NON-?AMENDABLE\b'
   map:
-    fee.type: full_stay_room_tax
+    policy.cancellable: "false"
+    fee.type: non_refundable
 
-- id: suite_room_split_windows
-  priority: 65
-  regex: '\b(?:ROOMS?\s*(?<rm_days>\d+)D(?:AYS?)?|SUITES?(?:\s*(?<suite_days>\d+)D(?:AYS?)?))\s+PRIOR\b'
+- id: always_charged_markers
+  priority: 99
+  regex: '\bCANCELS\s+ALWAYS\s+CHARGED\b'
   map:
-    notes.rooms_cutoff_days: "$rm_days"
-    notes.suites_cutoff_days: "$suite_days"
+    policy.cancellable: "false"
 
-- id: cxl_6pm_same_day_short
-  priority: 82
-  regex: '\b6\s*PM\s+CXL\s+ON\s+ARR\s+DATE\b'
+###############################################################################
+# F) CREDIT CARD / DEPOSIT / GUARANTEE
+###############################################################################
+
+- id: credit_card_required
+  priority: 60
+  regex: '\b(?:CREDIT\s+CARD|CC)\s+(?:REQ|REQUIRED|GUARANTEE(?:D)?)\b'
   map:
-    deadline.type: arrival_day_cutoff
-    deadline.local_time: "1800"
-    window.type: arrival_day
+    policy.flags.credit_card_guarantee: "true"
 
-- id: cancel_by_noon_local_time_days_prior
-  priority: 82
-  regex: '\bBY\s+(?:NOON|12:?00)\s+LOCAL\s+TIME\s+(?<days>\d+)\s+DAYS?\s+PRIOR\b'
+- id: deposit_at_booking
+  priority: 60
+  regex: '\b(?<n>\d+\s*(?:NT|NIGHTS?)|100\s*%|100PCT)\s+DPST(?:\s+AT\s+BOOKING)?\b'
   map:
-    deadline.type: relative_with_time
-    deadline.local_time: "1200"
-    deadline.relative_days: "$days"
-    window.type: relative_to_arrival
-    window.cutoff_days: "$days"
+    policy.flags.deposit_required: "true"
+    policy.flags.deposit_note: "$n"
 
-# FEE 1 NIGHT
-- id: fee_one_night_simple
-  priority: 92
-  regex: '\bFEE\s+1\s+(?:NITE|NIGHT)\b'
-  map:
-    fee.type: nights_penalty
-    fee.nights: "1"
+###############################################################################
+# G) FREE CANCELLATION WINDOWS (positive phrasing)
+###############################################################################
 
-# PENALTY OF 1 NIGHT ...
-- id: penalty_of_one_night
-  priority: 92
-  regex: '\bPENALTY\s+OF\s+1\s+(?:NITE|NIGHT)\b'
-  map:
-    fee.type: nights_penalty
-    fee.nights: "1"
-
-# MUST BE CANCELLED BY 6PM LOCAL HOTEL TIME 1 DAY PRIOR TO ARRIVAL
-# (specific fast-path; maps 6PM -> 1800)
-- id: cancel_by_6pm_local_time_days_prior
-  priority: 88
-  regex: '\bCANCELLED\s+BY\s+6\s*PM\s+LOCAL\s+HOTEL\s+TIME\s+(?<days>\d+)\s+DAYS?\s+PRIOR\s+TO\s+ARR(?:IVAL)?\b'
-  map:
-    deadline.type: relative_with_time
-    deadline.local_time: "1800"
-    deadline.relative_days: "$days"
-    window.type: relative_to_arrival
-    window.cutoff_days: "$days"
-
-# Arrival-day cutoff with numeric time like "BEFORE 1200 DAY OF ARRIVAL" or "BY 12:00 DAY OF ARR"
-- id: arrival_day_before_numeric_time
-  priority: 96
-  regex: '\b-?\s*(?:CANCELLATION\s+PERMITTED\s+)?(?:BEFORE|BY)\s+(?<hhmm>\d{3,4}|\d{1,2}:\d{2})\s+(?:DAY\s+OF\s+ARR(?:IVAL)?)\b'
-  map:
-    deadline.type: arrival_day_cutoff
-    deadline.local_time: "$hhmm"
-    window.type: arrival_day
-
-# Arrival-day cutoff for "NOON" (common)
-- id: arrival_day_before_noon
-  priority: 96
-  regex: '\b-?\s*(?:CANCELLATION\s+PERMITTED\s+)?(?:BEFORE|BY)\s+NOON\s+(?:DAY\s+OF\s+ARR(?:IVAL)?)\b'
-  map:
-    deadline.type: arrival_day_cutoff
-    deadline.local_time: "1200"
-    window.type: arrival_day
-
-# Arrival-day cutoff for "MIDNIGHT" (some hotels use it)
-- id: arrival_day_before_midnight
-  priority: 96
-  regex: '\b-?\s*(?:CANCELLATION\s+PERMITTED\s+)?(?:BEFORE|BY)\s+MIDNIGHT\s+(?:DAY\s+OF\s+ARR(?:IVAL)?)\b'
-  map:
-    deadline.type: arrival_day_cutoff
-    deadline.local_time: "0000"
-    window.type: arrival_day
-
-# "BY 6PM DAY OF ARR/ARRIVAL"
-- id: arrival_day_by_6pm
-  priority: 96
-  regex: '\b-?\s*(?:CANCELLATION\s+PERMITTED\s+)?(?:BEFORE|BY)\s*6\s*PM\s+(?:LOCAL\s+(?:HOTEL\s+)?TIME\s+)?(?:DAY\s+OF\s+ARR(?:IVAL)?)\b'
-  map:
-    deadline.type: arrival_day_cutoff
-    deadline.local_time: "1800"
-    window.type: arrival_day
-
-# "FREE CANCELLATION UNTIL 1200 DAY OF ARR(IVAL)"
-- id: free_cxl_until_arrival_day_time
+- id: free_cancellation_until_arrival_day_time
   priority: 76
   regex: '\bFREE\s+CANCELLATION\s+(?:UNTIL|TILL)\s+(?<hhmm>\d{3,4}|\d{1,2}:\d{2}|NOON|MIDNIGHT)\s+(?:DAY\s+OF\s+ARR(?:IVAL)?)\b'
   map:
-    deadline.type: arrival_day_cutoff
-    deadline.local_time: "$hhmm"
-    window.type: arrival_day
+    policy.cancellable: "true"
+    free_cancel.type: arrival_day
+    free_cancel.local_time: "$hhmm"
+
+- id: free_cancellation_up_to_days_prior
+  priority: 76
+  regex: '\bCANCELLATION\s+PERMITTED\s+UP\s*TO\s+(?<d>\d+)\s*DAYS?\s+BEFORE\s+ARR(?:IVAL)?\b'
+  map:
+    policy.cancellable: "true"
+    free_cancel.type: relative_to_arrival
+    free_cancel.cutoff_days: "$d"
+
+- id: free_cancellation_after_booking_days
+  priority: 76
+  regex: '\bCANCELLATION\s+PERMITTED\s+UP\s*TO\s+(?<d>\d+)\s*DAYS?\s+AFTER\s+BOOKING\b'
+  map:
+    policy.cancellable: "true"
+    free_cancel.type: relative_to_booking
+    free_cancel.cutoff_days: "$d"
+
+###############################################################################
+# H) TIERED PENALTY SCHEDULES (common in your set)
+###############################################################################
+
+# e.g., "TWO DAYS PRIOR TO ARRIVAL: 10"  (we capture the percentage)
+- id: tier_two_days_prior
+  priority: 72
+  regex: '\bTWO\s+DAYS?\s+PRIOR\s+TO\s+ARR(?:IVAL)?:\s*(?<pct>\d{1,3})\b'
+  map:
+    tiers.two_days_prior.percent: "$pct"
+
+# "ONE DAY PRIOR TO ARRIVAL: 20"
+- id: tier_one_day_prior
+  priority: 72
+  regex: '\bONE\s+DAY\s+PRIOR\s+TO\s+ARR(?:IVAL)?:\s*(?<pct>\d{1,3})\b'
+  map:
+    tiers.one_day_prior.percent: "$pct"
+
+# "ON THE DAY OF ARRIVAL: 80"
+- id: tier_day_of_arrival
+  priority: 72
+  regex: '\bON\s+THE,\s*DAY\s+OF\s+ARR(?:IVAL)?:\s*(?<pct>\d{1,3})\b'
+  map:
+    tiers.day_of_arrival.percent: "$pct"
+
+# "NO SHOW: 100"
+- id: tier_no_show
+  priority: 72
+  regex: '\bNO\s+SHOW:\s*(?<pct>\d{1,3})\b'
+  map:
+    tiers.no_show.percent: "$pct"
+
+- id: fee_per_room_amount_currency
+  priority: 92
+  regex: '\b(?<amount>\d{1,3}(?:[.,]\d{3})*(?:[.,]\d+)?|\d+(?:[.,]\d+)?)\s*,?\s*(?<currency>[A-Z]{3})\s+CXL\s+FEE\s+PER\s+ROOM\b'
+  map:
+    fee.type: fixed_amount
+    fee.amount: "$amount"
+    fee.currency: "$currency"
+    fee.per_room: "true"
