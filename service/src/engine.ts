@@ -1,6 +1,6 @@
 import { loadRules } from "./rules";
 import { normalize } from "./normalize";
-import { computeConfidenceRules } from "./confidence";
+import { computeCoverageDecision } from "./confidence";
 import type { MatchHit, Policy, Rule, Span } from "./types";
 
 type Groups = Record<string, string | undefined>;
@@ -35,8 +35,8 @@ export function runRules(raw: string, externalRules?: Rule[]) {
         }
     }
 
-    const { confidence_rules } = computeConfidenceRules(policy, spans, text);
-    return { text, policy, spans, confidence_rules, hits };
+    const { coverage, criticalCount, acceptRules } = computeCoverageDecision(policy, spans, text);
+    return { text, policy, spans, coverage, criticalCount, acceptRules, hits };
 }
 
 // ---------- Mapping & Merge ----------

@@ -1,0 +1,6 @@
+{
+  "coverageThreshold": 0.92,
+  "minCriticalSignals": 1,
+  "ignoreCharsPattern": "[,.;:()]+",
+  "ignoreBoilerplateTokens": ["CXL", "CANCEL", "CANCELLATION", "PERMITTED"]
+}
