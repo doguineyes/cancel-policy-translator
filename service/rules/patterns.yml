@@ -186,6 +186,13 @@
   map:
     fee.tax_scope: excluded
 
+- id: beyond_that_time_first_night
+  priority: 91
+  regex: '\bBEYOND\s+THAT\s+TIME\s+THE\s+FIRST\s+NIGHT\s+WILL\s+BE\s+CHARGED\b'
+  map:
+    fee.type: nights_penalty
+    fee.nights: "1"
+
 ###############################################################################
 # E) CANCELLABLE / NON-CANCELLABLE FLAGS
 ###############################################################################
@@ -253,6 +260,14 @@
     policy.cancellable: "true"
     free_cancel.type: relative_to_booking
     free_cancel.cutoff_days: "$d"
+
+- id: free_cancel_no_charge_prior_local_time
+  priority: 89
+  regex: '\bNO\s+CANCELLATION\s+CHARGE\s+APPLIES\s+PRIOR\s+TO\s+(?<hhmm>\d{1,2}:\d{2}|\d{3,4})\s+LOCAL\s+TIME\b.*?\b(?:PRIOR|BEFORE)\s+TO\s+ARR(?:IVAL)?\b'
+  map:
+    policy.cancellable: "true"
+    free_cancel.type: relative_to_arrival
+    free_cancel.local_time: "$hhmm"
 
 ###############################################################################
 # H) TIERED PENALTY SCHEDULES (common in your set)
